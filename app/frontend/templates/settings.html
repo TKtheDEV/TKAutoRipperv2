@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,55 +5,12 @@
   <title>TKAutoRipper Settings</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" type="image/gif" href="/static/favicon.gif">
-  <script src="https://unpkg.com/htmx.org@1.9.5"></script>
-  <script>document.documentElement.classList.add('dark-mode');</script>
-  <style>
-    .switch {
-      position: relative;
-      display: inline-block;
-      width: 50px;
-      height: 24px;
-      margin-left: 10px;
-    }
-
-    .switch input {
-      display: none;
-    }
-
-    .slider {
-      position: absolute;
-      cursor: pointer;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background-color: #ccc;
-      transition: 0.4s;
-      border-radius: 24px;
-    }
-
-    .slider::before {
-      content: "";
-      position: absolute;
-      height: 20px;
-      width: 20px;
-      left: 2px;
-      bottom: 2px;
-      background-color: white;
-      transition: 0.4s;
-      border-radius: 50%;
-    }
-
-    input:checked + .slider {
-      background-color: #4caf50;
-    }
-
-    input:checked + .slider::before {
-      transform: translateX(26px);
-    }
-  </style>
 </head>
 <body>
-  <div id="toast" style="position: fixed; top: 1rem; right: 1rem; z-index: 9999; pointer-events: none;"></div>
+  <!-- 🔔 Toast Container -->
+  <div id="toast"></div>
 
-  <header class="header-bar">
+  <header class="header-bar" role="banner" aria-label="Settings Header">
     <div class="title-left">
       <a href="/" style="color:white;">⬅️ Back</a>
       <h1 style="margin-left: 1rem;">Settings</h1>
@@ -65,56 +21,60 @@
     </div>
   </header>
 
-
-  <main class="settings-content">
+  <main class="settings-content" role="main">
     {% for section, values in config.items() %}
-      <div class="settings-tile">
+      <div class="tile">
         <h2>[{{ section }}]</h2>
         {% for key, meta in values.items() %}
-          <form method="post" hx-post="/settings" hx-target="#toast" hx-swap="innerHTML">
+          {% if key.strip() %}
+          <form onsubmit="submitSetting(event)">
             <input type="hidden" name="section" value="{{ section }}">
             <input type="hidden" name="key" value="{{ key }}">
-  
+
             <label><strong>{{ key }}</strong><br>
-              <small>{{ meta.description }}</small>
+              <small>{{ meta.description or 'No description provided.' }}</small>
             </label>
-  
+
             {% if meta.type == "boolean" %}
-              <input type="hidden" name="value" value="{{ 'false' if meta.value else 'true' }}">
-              <label class="switch">
-                <input 
-                  type="checkbox"
-                  name="bool_toggle"
-                  {% if meta.value %}checked{% endif %}
-                  hx-post="/settings"
-                  hx-vals='{"section": "{{ section }}", "key": "{{ key }}", "value": "{{ 'false' if meta.value else 'true' }}"}'
-                  hx-target="#toast"
-                  hx-swap="innerHTML"
-                >
-                <span class="slider"></span>
-              </label>
-  
+              <div class="input-row">
+                <label class="switch">
+                  <input 
+                    type="checkbox"
+                    name="bool_toggle"
+                    {% if meta.value %}checked{% endif %}
+                    onchange="submitToggle(this, '{{ section }}', '{{ key }}')"
+                  >
+                  <span class="slider"></span>
+                </label>
+              </div>
             {% elif meta.type == "select" and meta.choices %}
-              <select name="value">
-                {% for option in meta.choices %}
-                  <option value="{{ option }}" {% if option == meta.value %}selected{% endif %}>{{ option }}</option>
-                {% endfor %}
-              </select>
-              <button type="submit">Save</button>
-  
+              <div class="input-row">
+                <select name="value">
+                  {% for option in meta.choices %}
+                    <option value="{{ option }}" {% if option == meta.value %}selected{% endif %}>{{ option }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit">Save</button>
+              </div>
+
             {% elif meta.type in ["string", "path", "integer", "float"] %}
-              <input type="text" name="value" value="{{ meta.value }}">
-              <button type="submit">Save</button>
-  
+              <div class="input-row">
+                <input type="text" name="value" value="{{ meta.value }}">
+                <button type="submit">Save</button>
+              </div>
+
             {% elif meta.type == "list" and meta.value %}
               <textarea name="value" rows="3">{{ meta.value | join(', ') }}</textarea>
               <button type="submit">Save</button>
-  
+
             {% else %}
-              <input type="text" name="value" value="{{ meta.value }}">
-              <button type="submit">Save</button>
+              <div class="input-row">
+                <input type="text" name="value" value="{{ meta.value }}">
+                <button type="submit">Save</button>
+              </div>
             {% endif %}
           </form>
+          {% endif %}
         {% endfor %}
       </div>
     {% endfor %}
@@ -131,26 +91,76 @@
       document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/`;
     }
 
+    function applyTheme(mode) {
+      const icon = document.getElementById('theme-icon');
+      document.documentElement.classList.remove('dark-mode', 'light-mode');
+      document.documentElement.classList.add(`${mode}-mode`);
+      if (icon) icon.textContent = mode === 'dark' ? '🌙' : '☀️';
+    }
+
     function toggleTheme() {
       const current = getCookie('theme') || 'light';
       const next = current === 'light' ? 'dark' : 'light';
       applyTheme(next);
+      setCookie('theme', next);
     }
 
-    function applyTheme(mode) {
-      const body = document.body;
-      const icon = document.getElementById('theme-icon');
+    function showToast(message, type = "success") {
+      const toast = document.getElementById("toast");
+      const wrapper = document.createElement("div");
+      wrapper.classList.add("toast-msg");
+      if (type === "error") wrapper.style.borderLeft = "5px solid red";
+      wrapper.textContent = message;
+      toast.appendChild(wrapper);
+      setTimeout(() => wrapper.classList.add("fade-out"), 3000);
+      setTimeout(() => wrapper.remove(), 4000);
+    }
 
-      body.classList.remove('dark-mode', 'light-mode');
-      if (mode === 'dark') {
-        body.classList.add('dark-mode');
-        icon.textContent = '🌙';
-      } else {
-        body.classList.add('light-mode');
-        icon.textContent = '☀️';
+    async function submitSetting(event) {
+      event.preventDefault();
+      const form = event.target;
+      const formData = new FormData(form);
+      const payload = new URLSearchParams();
+
+      formData.forEach((value, key) => {
+        payload.append(key, value);
+      });
+
+      try {
+        const res = await fetch("/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: payload
+        });
+
+        if (!res.ok) throw new Error("Save failed");
+        showToast(`Saved ${payload.get("section")}.${payload.get("key")}`);
+      } catch (err) {
+        console.error(err);
+        showToast("Save failed!", "error");
       }
+    }
 
-      setCookie('theme', mode);
+    async function submitToggle(checkbox, section, key) {
+      const value = checkbox.checked ? "true" : "false";
+      const payload = new URLSearchParams();
+      payload.append("section", section);
+      payload.append("key", key);
+      payload.append("value", value);
+
+      try {
+        const res = await fetch("/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: payload
+        });
+
+        if (!res.ok) throw new Error("Toggle failed");
+        showToast(`Toggled ${section}.${key}`);
+      } catch (err) {
+        console.error(err);
+        showToast("Toggle failed!", "error");
+      }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -160,26 +170,6 @@
       }
       applyTheme(mode);
     });
-
-    function showToast(message, type = "success") {
-        const toast = document.getElementById("toast");
-
-        const wrapper = document.createElement("div");
-        wrapper.classList.add("toast-msg");
-        wrapper.classList.add("toast-" + type);
-        wrapper.innerHTML = message;
-
-        toast.innerHTML = "";
-        toast.appendChild(wrapper);
-
-        setTimeout(() => {
-        wrapper.classList.add("fade-out");
-        }, 3000);
-
-        setTimeout(() => {
-        toast.innerHTML = "";
-        }, 4000);
-    }
   </script>
 </body>
 </html>
