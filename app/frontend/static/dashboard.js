@@ -237,4 +237,6 @@ document.addEventListener('DOMContentLoaded', () => {
   updateDrives();
   updateJobs();
   setInterval(updateSystemInfo, 5000);
+  setInterval(updateDrives, 5000);
+  setInterval(updateJobs, 5000);
 });
