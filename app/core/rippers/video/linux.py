@@ -30,6 +30,7 @@ def rip_video_disc(job: Job, disc_type: str) -> List[Tuple[List[str], str]]:
         # Output file assumed to match disc label
         mkv_file = temp_mkv_dir / f"{job.disc_label}.mkv"
         output_file = job.output_path.with_suffix(f".{output_format}")
+        output_file.parent.mkdir(parents=True, exist_ok=True)
         hb_cmd = build_handbrake_cmd(
             mkv_file=mkv_file,
             output_path=output_file,

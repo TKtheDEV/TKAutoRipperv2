@@ -40,7 +40,7 @@ def insert_drive(payload: dict):
         raise HTTPException(status_code=400, detail="Missing required fields")
 
     if not drive_tracker.get_drive(drive):
-        drive_tracker.register_drive(drive, model="Unknown", capability="Unknown")
+        drive_tracker.register_drive(drive, model="Unknown", capability=["Unknown"])
 
     if not drive_tracker.get_drive(drive).is_available:
         return {"status": "Drive in use, skipping job creation"}

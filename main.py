@@ -12,6 +12,7 @@ from app.api import drives
 from app.api import jobs
 from app.api import settings
 from app.api import systeminfo
+from app.api import ws_log
 from app.core.auth import verify_web_auth
 from app.core.discdetection import linux as discdetection
 from app.core.drive.detector import linux as drive_detector
@@ -47,7 +48,7 @@ app.include_router(drives.router)
 app.include_router(jobs.router)
 app.include_router(settings.router)
 app.include_router(systeminfo.router)
-
+app.include_router(ws_log.router)
 
 if __name__ == "__main__":
     cert_dir = Path("~/TKAutoRipper/config").expanduser()
@@ -63,7 +64,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "main:app",
-        host="::1",
+        host="::",
         port=8000,
         reload=False,
         ssl_certfile=str(cert_file),

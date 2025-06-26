@@ -6,7 +6,8 @@ from typing import List
 
 def get_available_hw_encoders():
     try:
-        use_flatpak = config.get("Advanced", "HandbrakeFlatpak") or True
+        raw_val = config.get("Advanced", "HandbrakeFlatpak")
+        use_flatpak = raw_val if isinstance(raw_val, bool) else True
         if use_flatpak:
             cmd = ["flatpak", "run", "--command=HandBrakeCLI", "fr.handbrake.ghb", "-h"]
         else:
