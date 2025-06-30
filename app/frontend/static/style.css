@@ -438,3 +438,55 @@ main.settings-content .tile {
   background-size: 1em;
   padding-right: 2rem;
 }
+
+.progress-container{
+  background:#444;
+  border-radius:4px;
+  overflow:hidden;
+  height:18px;
+}
+.progress-bar{
+  background:#4caf50;      /* vibrant green */
+  height:100%;
+  transition:width .3s ease;
+}
+
+
+/* === Status badge colouring === */
+.status-badge { padding:2px 6px; border-radius:4px; }
+.status-badge.queued    { background:#757575; }
+.status-badge.ripping,
+.status-badge.running   { background:#ffa500; } /* orange */
+.status-badge.finished  { background:#4caf50; } /* green  */
+.status-badge.failed,
+.status-badge.cancelled { background:#e53935; } /* red    */
+
+/* Log panel dark / light handled via custom prop earlier */
+/* Copy button */
+#copy-btn{
+  background:transparent;border:none;cursor:pointer;font-size:1rem;margin-left:4px;
+}
+#copy-btn:hover{transform:scale(1.2);}
+
+
+/* === Status badge colouring === */
+.status-badge{padding:2px 6px;border-radius:4px;}
+.status-badge.queued    {background:#757575;}
+.status-badge.running   {background:#ffa500;} /* orange */
+.status-badge.finished  {background:#4caf50;} /* green  */
+.status-badge.failed,
+.status-badge.cancelled {background:#e53935;} /* red    */
+
+/* Spinner for running jobs on dashboard */
+.job-card.running h2::after{
+  content:" ⏳";
+  display:inline-block;
+  animation:spin 1s linear infinite;
+}
+@keyframes spin{from{transform:rotate(0)} to{transform:rotate(360deg);}}
+
+/* Copy-button */
+#copy-btn{
+  background:transparent;border:none;cursor:pointer;font-size:1rem;margin-left:4px;
+}
+#copy-btn:hover{transform:scale(1.2);}

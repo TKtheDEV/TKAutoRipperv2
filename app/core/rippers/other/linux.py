@@ -1,46 +1,43 @@
-from typing import List, Tuple
+# app/core/rippers/other/linux.py
 from pathlib import Path
-from ...configmanager import config
-from ...job.job import Job
-from ...integration.dd.linux import build_iso_dump_cmd
-from ...integration.zstd.linux import build_zstd_cmd
+from typing import List, Tuple
+
+from app.core.configmanager import config
+from app.core.integration.dd.linux import build_iso_dump_cmd
+from app.core.integration.zstd.linux import build_zstd_cmd
+from app.core.job.job import Job
 
 
-def rip_generic_disc(job: Job) -> List[Tuple[List[str], str]]:
+def rip_generic_disc(job: Job) -> List[Tuple[List[str], str, bool]]:
     """
-    Constructs ripping steps for ROM-type discs: dump ISO, optionally compress,
-    and copy/move to final output path.
+    ISO dump (drive needed) then optional compression.
     """
-    other_cfg = config.section("OTHER")
-    use_compression = other_cfg.get("usecompression", True)
-    compression = other_cfg.get("compression", "zstd").lower()
+    cfg = config.section("OTHER")
+    use_comp = cfg.get("usecompression", True)
+    comp_alg = cfg.get("compression", "zstd").lower()
 
-    iso_name = f"{job.disc_label}.iso"
-    raw_iso_path = job.temp_path / iso_name
+    iso_path = job.temp_path / f"{job.disc_label}.iso"
+    steps: List[Tuple[List[str], str, bool]] = [
+        (build_iso_dump_cmd(job.drive, iso_path), "Creating ISO image", True)
+    ]
 
-    steps = []
-
-    # Step 1: ISO dump with pv + dd
-    dd_cmd = build_iso_dump_cmd(job.drive, raw_iso_path)
-    steps.append((dd_cmd, "Creating ISO image from disc"))
-
-    job.output_path_lock = True
-    Path(job.output_path).mkdir(parents=True, exist_ok=True)
-
-    # Step 2: Optional compression or copy to final output
-    if use_compression and compression == "zstd":
-        final_path = job.output_path.with_suffix(".iso.zst")
-        zstd_cmd = build_zstd_cmd(raw_iso_path, final_path)
-        steps.append((zstd_cmd, "Compressing ISO with zstd"))
-
-    elif use_compression and compression == "bz2":
-        final_path = job.output_path.with_suffix(".iso.bz2")
-        bz2_cmd = ["bzip2", str(raw_iso_path)]
-        steps.append((bz2_cmd, "Compressing ISO with bzip2"))
-
+    if use_comp and comp_alg == "zstd":
+        steps.append(
+            (build_zstd_cmd(iso_path, job.output_path.with_suffix(".iso.zst")),
+             "Compressing ISO (zstd)",
+             False)
+        )
+    elif use_comp and comp_alg == "bz2":
+        steps.append(
+            (["bzip2", str(iso_path)],
+             "Compressing ISO (bzip2)",
+             False)
+        )
     else:
-        final_path = job.output_path.with_suffix(".iso")
-        copy_cmd = ["cp", str(raw_iso_path), str(final_path)]
-        steps.append((copy_cmd, "Copying ISO to final output location"))
+        steps.append(
+            (["cp", str(iso_path), str(job.output_path.with_suffix('.iso'))],
+             "Copying ISO to final destination",
+             False)
+        )
 
     return steps

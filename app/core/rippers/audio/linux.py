@@ -1,21 +1,21 @@
+# app/core/rippers/audio/linux.py
 from typing import List, Tuple
-from ...configmanager import config
-from ...integration.abcde.linux import run_abcde
-from ...job.job import Job
+
+from app.core.integration.abcde.linux import run_abcde
+from app.core.configmanager import config
+from app.core.job.job import Job
 
 
-def rip_audio_cd(job: Job) -> List[Tuple[List[str], str]]:
+def rip_audio_cd(job: Job) -> List[Tuple[List[str], str, bool]]:
     """
-    Returns the abcde ripping step for an audio CD job.
-
-    :param job: The Job instance
-    :return: A list with a single tuple: (command, step description)
+    Audio CD – one step with abcde; drive can be released immediately
+    afterwards (abcde ejects anyway).
     """
-    cd_config = config.section("CD")
-    command = run_abcde(
+    cd_cfg = config.section("CD")
+    cmd = run_abcde(
         drive_path=job.drive,
-        output_format=cd_config["outputformat"],
-        config_path=cd_config["configpath"],
-        additional_options=cd_config["additionaloptions"]
+        output_format=cd_cfg["outputformat"],
+        config_path=cd_cfg["configpath"],
+        additional_options=cd_cfg["additionaloptions"],
     )
-    return [(command, "Ripping & Encoding Audio CD")]
+    return [(cmd, "Ripping & Encoding Audio CD", True)]

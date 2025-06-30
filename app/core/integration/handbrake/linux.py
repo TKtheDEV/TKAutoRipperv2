@@ -52,10 +52,9 @@ def build_handbrake_cmd(
     preset_name: str,
     flatpak: bool = True
 ) -> List[str]:
-    presetpathcmd = f"--preset-import-file={preset_path}"
 
     base_cmd = [
-        presetpathcmd,
+        "--preset-import-file", preset_path,
         "-Z", preset_name,
         "-i", str(mkv_file),
         "-o", str(output_path)

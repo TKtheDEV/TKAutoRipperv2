@@ -166,6 +166,20 @@ function ejectForType(type) {
     });
 }
 
+/* ── Job handling ───────────────────────────────────────── */
+function cancelJob(jobId) {
+  if (!confirm("Cancel this job?")) return;
+
+  fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" })
+    .then(r => { if (!r.ok) throw new Error(); })
+    .then(() => {
+      showToast("Job cancelled");
+      updateJobs();
+      updateDrives();
+    })
+    .catch(() => showToast("Cancel failed!", "error"));
+}
+
 function updateJobs() {
   fetch("/api/jobs")
     .then(res => res.json())
@@ -194,7 +208,10 @@ function updateJobs() {
           <strong>Type:</strong> ${job.disc_type}<br>
           <strong>Progress:</strong> ${job.progress}%<br>
           <strong>Drive:</strong> ${job.drive}<br>
-          <a href="/jobs/${job.job_id}">🔍 View Job</a>
+          <a href="/jobs/${job.job_id}">🔍 View</a>
+          ${["Running", "Queued"].includes(job.status)
+              ? ` &nbsp;|&nbsp; <a href="#" onclick="cancelJob('${job.job_id}')" style="color:red;">⛔ Cancel</a>`
+              : ""}
         `;
         row.appendChild(tile);
       });
