@@ -18,4 +18,4 @@ def rip_audio_cd(job: Job) -> List[Tuple[List[str], str, bool]]:
         config_path=cd_cfg["configpath"],
         additional_options=cd_cfg["additionaloptions"],
     )
-    return [(cmd, "Ripping & Encoding Audio CD", True)]
+    return [(cmd, "Ripping & Encoding Audio CD", True, 1.0)]

@@ -1,11 +1,12 @@
-# app/core/job/runner.py
 from __future__ import annotations
+
 import os
 import signal
 import subprocess
 import threading
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Tuple, Optional
+
 from app.core.drive.manager import drive_tracker
 from .job import Job
 
@@ -13,11 +14,9 @@ from .job import Job
 # ------------------------------------------------------------
 def get_job_steps(job: Job) -> List[Tuple[List[str], str, bool, float]]:
     """
-    Resolve disc-type to ripper and get steps.
-
-    Each step tuple may be 3- or 4-elements:
-        (cmd, description, release_drive)                # equal weight
-        (cmd, description, release_drive, weight:float)   # custom weight
+    Returns the canonical list of step tuples:
+      (command, description, release_drive, weight)
+    We import lazily to avoid circulars.
     """
     dtype = job.disc_type.lower()
 
@@ -43,7 +42,7 @@ def get_job_steps(job: Job) -> List[Tuple[List[str], str, bool, float]]:
 # ============================================================
 class JobRunner:
     """
-    Runs a Job in a background thread.
+    Runs a job in a background thread.
     """
 
     def __init__(
@@ -57,146 +56,120 @@ class JobRunner:
         self.process: Optional[subprocess.Popen] = None
         self._cancelled = False
 
-    # ── public API ───────────────────────────────────────────
+    # ---------------------------------------------------------
     def run(self) -> None:
-        threading.Thread(target=self._run_steps, daemon=True).start()
+        threading.Thread(target=self._run, daemon=True).start()
 
     def cancel(self) -> None:
-        """
-        External cancellation: kill current process-group, free drive,
-        mark job cancelled.
-        """
         self._cancelled = True
         if self.process:
-            try:
-                os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
-            except Exception:
-                pass
+            try: os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+            except Exception: pass
+        self.job.mark_cancelled()
 
-        self.job.status = "Cancelled"
-        drive_tracker.release_drive(self.job.drive)
-        subprocess.run(["eject", self.job.drive], check=False)
+        if self.job.drive:
+            drive_tracker.release_drive(self.job.drive)
+            subprocess.run(["eject", self.job.drive], check=False)
 
-    # ── internal ────────────────────────────────────────────
-    def _run_steps(self) -> None:
+    # ---------------------------------------------------------
+    def _initialize_steps(self) -> None:
+        """
+        Fill job.steps & step_weights if they are empty (fresh job).
+        """
+        if self.job.steps:
+            return  # already initialised (resume case)
+
+        raw = get_job_steps(self.job)
+        self.job.step_weights = [tpl[3] for tpl in raw]  # fourth element
+        for idx, (_, desc, _, _) in enumerate(raw, start=1):
+            self.job.steps.append(
+                {"index": idx, "name": desc, "completed": False}
+            )
+
+    # ---------------------------------------------------------
+    def _run(self) -> None:
         try:
-            raw_steps = get_job_steps(self.job)
+            self.job.job_status = "Running"
+            self._initialize_steps()
 
-            # normalise to 4-tuple and compute weights
-            prepared: List[Tuple[List[str], str, bool, float]] = []
-            explicit_weights: List[float] = []
+            steps = get_job_steps(self.job)
 
-            for tpl in raw_steps:
-                if len(tpl) == 3:          # no weight given
-                    cmd, desc, rel = tpl
-                    prepared.append((cmd, desc, rel, 0.0))
-                elif len(tpl) == 4:
-                    cmd, desc, rel, w = tpl
-                    prepared.append((cmd, desc, rel, w))
-                    explicit_weights.append(w)
-                else:
-                    raise ValueError("Step tuples must be 3 or 4 elements")
-
-            # If no step provided a weight or weights don't sum to 1,
-            # distribute evenly.
-            if not explicit_weights or abs(sum(explicit_weights) - 1.0) > 1e-6:
-                even = 1.0 / len(prepared)
-                prepared = [(c, d, r, even) for (c, d, r, _) in prepared]
-
-            self.job.steps_total = len(prepared)
-
-            completed_fraction = 0.0
-
-            for idx, (cmd, desc, release_after, weight) in enumerate(prepared, 1):
+            # skip already-completed steps (resume case)
+            current_idx = self.job.step_index
+            for i in range(current_idx, len(steps)):
                 if self._cancelled:
                     return
 
-                self.job.update_step(desc, idx)
+                cmd, desc, release_drive, weight = steps[i]
                 self.job.step_progress = 0
+                self.job.steps[i]["name"] = desc  # keep in sync
 
-                ok = self._run_step(cmd, weight, completed_fraction)
+                ok = self._run_step(cmd, weight)
                 if not ok:
                     self.job.mark_failed()
-                    drive_tracker.release_drive(self.job.drive)
                     return
 
-                completed_fraction += weight
+                self.job.mark_step_done()
+                self.job.save_resume_state()
 
-                if release_after:
+                # early drive release
+                if release_drive and self.job.drive:
                     subprocess.run(["eject", self.job.drive], check=False)
                     drive_tracker.release_drive(self.job.drive)
 
             self.job.mark_finished()
 
         except Exception as exc:
-            self.job.append_stdout(f"Fatal JobRunner exception: {exc}")
+            self.job.append_stdout(f"Fatal exception: {exc}")
             self.job.mark_failed()
-            drive_tracker.release_drive(self.job.drive)
 
-    # --------------------------------------------------------
-    def _run_step(
-        self,
-        command: List[str],
-        weight: float,
-        fraction_before: float,
-    ) -> bool:
-        """
-        Execute a single command, stream stdout, update progress.
-
-        * `weight`            → fraction of total job time this step represents
-        * `fraction_before`   → cumulative progress already achieved (0-1)
-        """
+    # ---------------------------------------------------------
+    def _run_step(self, command: List[str], weight: float) -> bool:
         log_path = self.job.temp_path / "log.txt"
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
             with open(log_path, "a") as lf:
-
                 self.process = subprocess.Popen(
                     command,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    preexec_fn=os.setsid,  # new process-group
+                    preexec_fn=os.setsid,  # own process-group
                 )
 
-                line_count = 0
                 for line in self.process.stdout:
+                    if self._cancelled:
+                        return False
                     line = line.rstrip()
-                    line_count += 1
-
                     self.job.append_stdout(line)
                     lf.write(line + "\n")
                     lf.flush()
                     if self.on_output:
                         self.on_output(line)
 
-                    # naive but smooth progress: bump 0-99 within the step
-                    if line_count % 20 == 0:                      # reduce chatter
-                        self._update_progress(
-                            step_pct=min(99, self.job.step_progress + 1),
-                            weight=weight,
-                            done_before=fraction_before,
-                        )
+                    # naive in-step progress (bounces to keep UI alive)
+                    self.job.step_progress = min(99, self.job.step_progress + 1)
+                    self._recalc_job_progress(weight)
 
                 self.process.wait()
-
-                # mark step 100 %
-                self._update_progress(100, weight, fraction_before)
-
+                self.job.step_progress = 100
+                self._recalc_job_progress(weight)
                 return self.process.returncode == 0
 
         except Exception as exc:
-            self.job.append_stdout(f"Exception while running command: {exc}")
+            self.job.append_stdout(f"Exception in subprocess: {exc}")
             return False
 
-    # --------------------------------------------------------
-    def _update_progress(self, step_pct: int, weight: float, done_before: float) -> None:
+    # ---------------------------------------------------------
+    def _recalc_job_progress(self, current_weight: float) -> None:
         """
-        Recalculate job.progress given the current step percentage.
+        job_progress = sum(done_weights) + step_progress% * current_weight
+        """
+        done_fraction = sum(
+            w for idx, w in enumerate(self.job.step_weights)
+            if idx < self.job.step_index or self.job.steps[idx]["completed"]
+        )
 
-        total = done_before + (step_pct/100) * weight
-        """
-        self.job.step_progress = step_pct
-        total_fraction = done_before + (step_pct / 100.0) * weight
-        self.job.progress = int(total_fraction * 100)
+        step_fraction = (self.job.step_progress / 100.0) * current_weight
+        self.job.job_progress = int((done_fraction + step_fraction) * 100)

@@ -220,6 +220,61 @@ function updateJobs() {
     });
 }
 
+function resumeJob(jobId){
+  fetch(`/api/jobs/${jobId}/resume`, {method:"POST"})
+    .then(r => { if(!r.ok) throw new Error(); })
+    .then(()=> {
+      showToast("Job resumed");
+      updateJobs();
+      updateResumables();
+    })
+    .catch(()=> showToast("Resume failed!", "error"));
+}
+
+/* ── Resumable list ───────────────────────────────────── */
+function updateResumables(){
+  fetch("/api/jobs/resumable")
+    .then(r => r.json())
+    .then(jobs => {
+      const box = document.getElementById("resumables");
+      if (!box) return;
+
+      box.innerHTML = "";
+      if (!jobs.length){
+        box.innerHTML = `<div class="tile"><h3>No unfinished jobs</h3></div>`;
+        return;
+      }
+
+      const row = document.createElement("div");
+      row.className = "tile-row";
+
+      jobs.forEach(job => {
+        const tile = document.createElement("div");
+        tile.className = "tile job-card queued";
+        tile.innerHTML = `
+          <h2>${job.disc_label}</h2>
+          <strong>Status:</strong> ${job.job_status}<br>
+          <strong>Type:</strong> ${job.disc_type}<br>
+          <strong>Progress:</strong> ${job.job_progress}%<br>
+          <a href="#" onclick="resumeJob('${job.job_id}')">▶️ Resume</a> |
+          <a href="#" onclick="deleteResume('${job.job_id}')" style="color:red;">🗑 Delete</a>
+        `;
+        row.appendChild(tile);
+      });
+
+      box.appendChild(row);
+    });
+}
+
+function deleteResume(jobId){
+  if(!confirm("Delete unfinished job and temp files?")) return;
+  fetch(`/api/drives/remove`, { // reuse remove endpoint to clean up temp
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({job_id:jobId})
+  }).then(()=>{ showToast("Deleted"); updateResumables(); });
+}
+
 function getCookie(name) {
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
   return match ? decodeURIComponent(match[2]) : null;
@@ -253,7 +308,9 @@ document.addEventListener('DOMContentLoaded', () => {
   updateSystemInfo();
   updateDrives();
   updateJobs();
+  updateResumables();
   setInterval(updateSystemInfo, 5000);
-  setInterval(updateDrives, 5000);
-  setInterval(updateJobs, 5000);
+  setInterval(updateDrives,   5000);
+  setInterval(updateJobs,     5000);
+  setInterval(updateResumables, 10000);
 });
