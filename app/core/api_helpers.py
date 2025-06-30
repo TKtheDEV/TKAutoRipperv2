@@ -1,35 +1,21 @@
-import requests
 import logging
-from urllib.parse import urljoin
-from .configmanager import config
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+import requests
+from requests.exceptions import RequestException
+from .settings import settings
 
-def post_api(endpoint: str, payload: dict) -> bool:
-    """
-    Posts JSON payload to the backend API over HTTPS with basic authentication.
-    Allows self-signed SSL certs.
-    """
-    base_url = config.get("Advanced", "BaseURL") or "https://[::1]:8000"
-    full_url = urljoin(base_url, endpoint)
+log = logging.getLogger("api_helpers")
 
-    username = config.get("auth", "username")
-    password = config.get("auth", "password")
-
+def post_api(path: str, json: dict, *, verify: bool | None = None):
+    url = settings.base_url.rstrip("/") + path
     try:
-        response = requests.post(
-            full_url,
-            json=payload,
-            auth=(username, password),
-            verify=False,  # Accept self-signed cert
-            timeout=10
+        resp = requests.post(
+            url,
+            json=json,
+            timeout=30,
+            verify=settings.tls_verify if verify is None else verify,
         )
-        if response.status_code == 200:
-            logging.debug(f"✅ POST {endpoint} succeeded.")
-            return True
-        else:
-            logging.error(f"❌ POST {endpoint} failed with {response.status_code}: {response.text}")
-            return False
-    except Exception as e:
-        logging.error(f"❌ POST {endpoint} failed: {e}")
-        return False
+        resp.raise_for_status()
+        return resp.json()
+    except RequestException as exc:
+        log.warning("POST %s failed: %s (non-fatal)", url, exc)
+        return None

@@ -7,7 +7,7 @@ import subprocess
 import logging
 
 from ..core.configmanager import config
-from ..core.auth import verify_web_auth
+from ..api.auth import require_auth
 from ..core.job.tracker import job_tracker
 from ..core.drive.manager import drive_tracker
 from ..core.job.runner import JobRunner
@@ -30,7 +30,7 @@ def verify_auth(credentials: HTTPBasicCredentials = Depends(security)):
         )
 
 
-@router.post("/api/drives/insert", dependencies=[Depends(verify_auth)])
+@router.post("/api/drives/insert", dependencies=[Depends(require_auth)])
 def insert_drive(payload: dict):
     drive = payload.get("drive")
     disc_type = payload.get("disc_type")
@@ -65,7 +65,7 @@ def insert_drive(payload: dict):
     return {"status": "Job started", "job_id": job.job_id}
 
 
-@router.post("/api/drives/remove", dependencies=[Depends(verify_auth)])
+@router.post("/api/drives/remove", dependencies=[Depends(require_auth)])
 def remove_drive(payload: dict):
     drive = payload.get("drive")
     drive_obj = drive_tracker.get_drive(drive)
@@ -83,7 +83,7 @@ def remove_drive(payload: dict):
     return {"status": "Drive released and job cancelled" if job_id else "Drive released"}
 
 
-@router.get("/api/drives", dependencies=[Depends(verify_web_auth)])
+@router.get("/api/drives", dependencies=[Depends(require_auth)])
 def list_drives():
     import logging
     logging.info(f"DriveTracker ID: {id(drive_tracker)}")
@@ -102,7 +102,7 @@ def list_drives():
 class DriveEjectRequest(BaseModel):
     path: str
 
-@router.post("/api/drives/eject", dependencies=[Depends(verify_web_auth)])
+@router.post("/api/drives/eject", dependencies=[Depends(require_auth)])
 def eject_drive(request: DriveEjectRequest):
     drive = request.path
     drv = drive_tracker.get_drive(drive)

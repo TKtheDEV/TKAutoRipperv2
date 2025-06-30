@@ -8,7 +8,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from app.core.auth import verify_web_auth
+from app.api.auth import require_auth
 from app.core.job.tracker import job_tracker
 from app.core.job.job import Job
 from app.core.job.runner import JobRunner
@@ -18,7 +18,7 @@ router = APIRouter()
 
 # ──────────────────────────────────────────────────────────
 @router.get("/jobs/{job_id}", response_class=HTMLResponse,
-            dependencies=[Depends(verify_web_auth)])
+            dependencies=[Depends(require_auth)])
 def job_details_page(request: Request, job_id: str):
     job = job_tracker.get_job(job_id)
     if not job:
@@ -27,12 +27,12 @@ def job_details_page(request: Request, job_id: str):
                                       {"request": request, "job": job})
 
 # live jobs
-@router.get("/api/jobs", dependencies=[Depends(verify_web_auth)])
+@router.get("/api/jobs", dependencies=[Depends(require_auth)])
 def list_jobs():
     return [j.to_dict() for j in job_tracker.list_jobs()]
 
 # single live job
-@router.get("/api/jobs/{job_id}", dependencies=[Depends(verify_web_auth)])
+@router.get("/api/jobs/{job_id}", dependencies=[Depends(require_auth)])
 def get_job(job_id: str):
     job = job_tracker.get_job(job_id)
     if not job:
@@ -45,7 +45,7 @@ RESUME_ROOT = Path("~/TKAutoRipper/temp").expanduser()
 def _find_resume_files() -> List[Path]:
     return list(RESUME_ROOT.glob("*/.resume.json"))
 
-@router.get("/api/jobs/resumable", dependencies=[Depends(verify_web_auth)])
+@router.get("/api/jobs/resumable", dependencies=[Depends(require_auth)])
 def list_resumable_jobs():
     jobs = []
     for file_path in _find_resume_files():
@@ -59,7 +59,7 @@ def list_resumable_jobs():
     return jobs
 
 # ───── RESUME ENDPOINT ───────────────────────────────────
-@router.post("/api/jobs/{job_id}/resume", dependencies=[Depends(verify_web_auth)])
+@router.post("/api/jobs/{job_id}/resume", dependencies=[Depends(require_auth)])
 def resume_job(job_id: str):
     resume_file = RESUME_ROOT / job_id / ".resume.json"
     if not resume_file.exists():

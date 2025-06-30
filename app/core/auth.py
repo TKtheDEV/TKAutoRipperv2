@@ -5,7 +5,7 @@ from .configmanager import config
 
 security = HTTPBasic()
 
-def verify_web_auth(credentials: HTTPBasicCredentials = Depends(security)):
+def require_auth(credentials: HTTPBasicCredentials = Depends(security)):
     correct_username = config.get("auth", "username")
     correct_password = config.get("auth", "password")
     if not (

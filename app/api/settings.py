@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Request, Form, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from app.core.auth import verify_web_auth
+from app.api.auth import require_auth
 from app.core.configmanager import config
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/frontend/templates")
 
 
-@router.get("/settings", response_class=HTMLResponse, dependencies=[Depends(verify_web_auth)])
+@router.get("/settings", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
 def settings_page(request: Request):
     return templates.TemplateResponse("settings.html", {
         "request": request,
@@ -16,7 +16,7 @@ def settings_page(request: Request):
     })
 
 
-@router.post("/settings", dependencies=[Depends(verify_web_auth)])
+@router.post("/settings", dependencies=[Depends(require_auth)])
 def update_setting(
     section: str = Form(...),
     key: str = Form(...),
